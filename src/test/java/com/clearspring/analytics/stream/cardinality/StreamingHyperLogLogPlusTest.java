@@ -1,0 +1,146 @@
+package com.clearspring.analytics.stream.cardinality;
+
+import org.assertj.core.api.LongAssert;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.Random;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * <p>
+ * Created by guy.smoilov on 23/04/2017.
+ * </p>
+ */
+public class StreamingHyperLogLogPlusTest {
+
+    public static final int PRECISION = 10;
+    public static final int SPARSE_CARDINALITY = 100;
+    public static final int FULL_CARDINALITY = 10000;
+
+    private final Random r = new Random();
+    private HyperLogLogPlus src;
+    private StreamingHyperLogLogPlus target;
+
+    @Before
+    public void setup() {
+        src = new HyperLogLogPlus(PRECISION, PRECISION);
+        target = new StreamingHyperLogLogPlus(PRECISION);
+    }
+
+    @Test
+    public void sparseIntoEmpty() throws Exception {
+        addSparse(src);
+        addToTarget(src);
+
+        long actualCardniality = target.cardinality();
+        assertThat(actualCardniality).isEqualTo(src.cardinality());
+        assertWithinMarginOfError(actualCardniality, SPARSE_CARDINALITY);
+    }
+
+    private void addSparse(HyperLogLogPlus target) {
+        addApproxItems(target, SPARSE_CARDINALITY);
+    }
+
+    private void addFull(HyperLogLogPlus target) {
+        addApproxItems(target, FULL_CARDINALITY);
+    }
+
+    private void addApproxItems(HyperLogLogPlus target, int count) {
+        for (int i = 0; i < count; i++) {
+             target.offerHashed(r.nextLong());
+        }
+    }
+
+    @Test
+    public void sparseIntoSparse() throws Exception {
+        addSparse(src);
+        addSparse(target);
+
+        long cardinalityBefore = target.cardinality();
+
+        addToTarget(src);
+
+        long actualCardniality = target.cardinality();
+        assertThat(cardinalityBefore).isLessThan(actualCardniality);
+        assertWithinMarginOfError(actualCardniality, 2 * SPARSE_CARDINALITY);
+    }
+
+    private LongAssert assertWithinMarginOfError(long actualCardniality, long expectedCardinality) {
+        return assertThat(actualCardniality).isBetween((long) (expectedCardinality * 0.9), (long) (expectedCardinality * 1.1));
+    }
+
+    @Test
+    public void sparseIntoRegisterSet() throws Exception {
+        addSparse(src);
+        addFull(target);
+
+        long cardinalityBefore = target.cardinality();
+
+        addToTarget(src);
+
+        long actualCardniality = target.cardinality();
+        assertThat(cardinalityBefore).isLessThan(actualCardniality);
+        assertWithinMarginOfError(actualCardniality, FULL_CARDINALITY + SPARSE_CARDINALITY);
+    }
+
+    @Test
+    public void registerSetIntoEmpty() throws Exception {
+        addFull(src);
+        addToTarget(src);
+
+        long actualCardniality = target.cardinality();
+        assertThat(actualCardniality).isEqualTo(src.cardinality());
+        assertWithinMarginOfError(actualCardniality, FULL_CARDINALITY);
+
+    }
+
+    @Test
+    public void registerSetIntoSparse() throws Exception {
+        addFull(src);
+        addSparse(target);
+
+        long cardinalityBefore = target.cardinality();
+
+        addToTarget(src);
+
+        long actualCardniality = target.cardinality();
+        assertThat(cardinalityBefore).isLessThan(actualCardniality);
+        assertWithinMarginOfError(actualCardniality, FULL_CARDINALITY + SPARSE_CARDINALITY);
+
+    }
+
+    @Test
+    public void registerSetIntoRegisterSet() throws Exception {
+        addFull(src);
+        addFull(target);
+
+        long cardinalityBefore = target.cardinality();
+
+        addToTarget(src);
+
+        long actualCardniality = target.cardinality();
+        assertThat(cardinalityBefore).isLessThan(actualCardniality);
+        assertWithinMarginOfError(actualCardniality, 2 * FULL_CARDINALITY);
+
+    }
+
+    @Test(expected = CardinalityMergeException.class)
+    public void wrongPrecision_lower() throws Exception {
+        HyperLogLogPlus src = new HyperLogLogPlus(PRECISION - 1);
+        addToTarget(src);
+    }
+
+    @Test(expected = CardinalityMergeException.class)
+    public void wrongPrecision_higher() throws Exception {
+        HyperLogLogPlus src = new HyperLogLogPlus(PRECISION + 1);
+        addToTarget(src);
+    }
+
+    private void addToTarget(HyperLogLogPlus src) throws CardinalityMergeException, IOException {
+        target.add(new ByteArrayInputStream(src.getBytes()));
+    }
+}
