@@ -5,6 +5,7 @@ import com.clearspring.analytics.util.Varint;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 
 /**
  * <p>
@@ -16,11 +17,34 @@ public class StreamingHyperLogLogPlus extends HyperLogLogPlus {
     public static final int NORMAL_FORMAT_TYPE_INDICATOR = 0;
     public static final int SPARSE_FORMAT_TYPE_INDICATOR = 1;
 
+    private static Field registerSetInternalMField;
+    static {
+        // This is very ugly, but unfortunately necessary unless we want to override everything in the superclass...
+        registerSetInternalMField = null;
+        try {
+            registerSetInternalMField = RegisterSet.class.getDeclaredField("M");
+            registerSetInternalMField.setAccessible(true);
+        }
+        catch (NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private final int p;
+    private int[] registerSetInternalM;
 
     public StreamingHyperLogLogPlus(int p) {
         super(p);
         this.p = p;
+
+        RegisterSet ourRegisterSet = getRegisterSet();
+        try {
+            // Again, extremely ugly, but nothing for us to do with reasonable amount of work...
+            registerSetInternalM = (int[]) registerSetInternalMField.get(ourRegisterSet);
+        }
+        catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // TODO: Support having a sparse set as well. Right now, assuming we always have a register set simplifies things and is much more likely.
@@ -56,15 +80,33 @@ public class StreamingHyperLogLogPlus extends HyperLogLogPlus {
         int otherSp = Varint.readUnsignedVarInt(dataInputStream);
         int formatType = Varint.readUnsignedVarInt(dataInputStream);
         if (formatType == NORMAL_FORMAT_TYPE_INDICATOR) {
-            int size = Varint.readUnsignedVarInt(dataInputStream);
-            // TODO: There is a byte array of |size| in the input stream, we need to replicate Bits.getBits logic combined with
-            // the addAll logic from HLLP
+            readFromRegisterSet(dataInputStream);
         }
         else if (formatType == SPARSE_FORMAT_TYPE_INDICATOR) {
             readFromSparseSet(dataInputStream, otherP, otherSp);
         }
         else {
             throw new StreamingHyperLogLogPlusMergeException("Unknown format type " + formatType);
+        }
+    }
+
+    private void readFromRegisterSet(DataInputStream dataInputStream) throws IOException {
+        // We won't actually use this, but we have to read it or ruin the decoding
+        int size = Varint.readUnsignedVarInt(dataInputStream);
+
+        // The following is copied from RegisterSet.merge, with a few tweaks to avoid random access to the input stream
+        for (int bucket = 0; bucket < registerSetInternalM.length; ++bucket) {
+            int word = 0;
+            int nexIntFromSource = dataInputStream.readInt();
+            int nextIntFromUs = registerSetInternalM[bucket];
+            for (int j = 0; j < RegisterSet.LOG2_BITS_PER_WORD; ++j) {
+                int mask = 0x1f << (RegisterSet.REGISTER_SIZE * j);
+                int thisVal = (nextIntFromUs & mask);
+                int thatVal = (nexIntFromSource & mask);
+                word |= (thisVal < thatVal) ? thatVal : thisVal;
+            }
+
+            registerSetInternalM[bucket] = word;
         }
     }
 
