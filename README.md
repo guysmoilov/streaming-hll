@@ -4,6 +4,13 @@ Their implementation can be found here: https://github.com/addthis/stream-lib
 I would like to thank the original creators, their implementation is amazing, elegant, and written as simply as it can be.
 The only extension needed here was to better handle bulk merging of HLL++ instances, as efficiently as possible.
 
+## Example usage
+    StreamingHyperLogLogPlus target = new StreamingHyperLogLogPlus(14);
+    HyperLogLogPlus source = new HyperLogLogPlus(14, 16);
+    // offer some items to source....
+    target.add(new ByteArrayInputStream( soure.getBytes() ));
+    assert target.cardinality() == source.cardinality();
+
 ## Why the old dependency version?
 The dependency on clearspring is set to 2.5.2 because that's the version Cassandra is using, at least in version 2.2.6
 For my own practical reasons this is critical to my work.
