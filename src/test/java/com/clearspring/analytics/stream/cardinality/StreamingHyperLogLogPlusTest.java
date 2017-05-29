@@ -41,15 +41,15 @@ public class StreamingHyperLogLogPlusTest {
         assertWithinMarginOfError(actualCardniality, SPARSE_CARDINALITY);
     }
 
-    private void addSparse(HyperLogLogPlus target) {
+    private void addSparse(ICardinality target) {
         addApproxItems(target, SPARSE_CARDINALITY);
     }
 
-    private void addFull(HyperLogLogPlus target) {
+    private void addFull(ICardinality target) {
         addApproxItems(target, FULL_CARDINALITY);
     }
 
-    private void addApproxItems(HyperLogLogPlus target, int count) {
+    private void addApproxItems(ICardinality target, int count) {
         for (int i = 0; i < count; i++) {
              target.offerHashed(r.nextLong());
         }
@@ -141,6 +141,6 @@ public class StreamingHyperLogLogPlusTest {
     }
 
     private void addToTarget(HyperLogLogPlus src) throws CardinalityMergeException, IOException {
-        target.add(new ByteArrayInputStream(src.getBytes()));
+        target.addAll(new ByteArrayInputStream(src.getBytes()));
     }
 }
