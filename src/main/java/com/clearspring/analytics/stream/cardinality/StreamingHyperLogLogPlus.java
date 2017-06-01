@@ -325,6 +325,18 @@ public class StreamingHyperLogLogPlus implements ICardinality {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
         // write version flag (always negative)
+        writeToStream(dos);
+        return baos.toByteArray();
+    }
+
+    /**
+     * Similar to {@link #getBytes()}, but writes the bytes directly to the stream.
+     */
+    public void writeToStream(OutputStream outputStream) throws IOException {
+        writeToStream(new DataOutputStream(outputStream));
+    }
+
+    private void writeToStream(DataOutputStream dos) throws IOException {
         dos.writeInt(-VERSION);
         Varint.writeUnsignedVarInt(p, dos);
         Varint.writeUnsignedVarInt(0, dos); // For sp
@@ -334,7 +346,6 @@ public class StreamingHyperLogLogPlus implements ICardinality {
         {
             dos.writeInt(x);
         }
-        return baos.toByteArray();
     }
 
     /**

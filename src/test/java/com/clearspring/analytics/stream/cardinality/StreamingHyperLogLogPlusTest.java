@@ -5,6 +5,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Random;
 
@@ -95,7 +96,6 @@ public class StreamingHyperLogLogPlusTest {
         long actualCardniality = target.cardinality();
         assertThat(actualCardniality).isEqualTo(src.cardinality());
         assertWithinMarginOfError(actualCardniality, FULL_CARDINALITY);
-
     }
 
     @Test
@@ -110,7 +110,6 @@ public class StreamingHyperLogLogPlusTest {
         long actualCardniality = target.cardinality();
         assertThat(cardinalityBefore).isLessThan(actualCardniality);
         assertWithinMarginOfError(actualCardniality, FULL_CARDINALITY + SPARSE_CARDINALITY);
-
     }
 
     @Test
@@ -125,7 +124,22 @@ public class StreamingHyperLogLogPlusTest {
         long actualCardniality = target.cardinality();
         assertThat(cardinalityBefore).isLessThan(actualCardniality);
         assertWithinMarginOfError(actualCardniality, 2 * FULL_CARDINALITY);
+    }
 
+    @Test
+    public void writeToStream() throws Exception {
+        StreamingHyperLogLogPlus src = new StreamingHyperLogLogPlus(12);
+        addFull(src);
+        long cardinality = src.cardinality();
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        src.writeToStream(outputStream);
+        outputStream.close();
+
+        StreamingHyperLogLogPlus target = new StreamingHyperLogLogPlus(12);
+        target.addAll(new ByteArrayInputStream(outputStream.toByteArray()));
+
+        assertThat(target.cardinality()).isEqualTo(cardinality);
     }
 
     @Test(expected = CardinalityMergeException.class)
