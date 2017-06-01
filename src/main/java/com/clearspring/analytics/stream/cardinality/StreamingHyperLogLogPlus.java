@@ -33,12 +33,9 @@ public class StreamingHyperLogLogPlus implements ICardinality {
 
     // TODO: Support having a sparse set as well. Right now, assuming we always have a register set simplifies things and is much more likely.
     /**
-     * This constructor disables the sparse set.  If the counter is likely to exceed
-     * the sparse set thresholds than using this constructor will help avoid the
-     * extra memory pressure created by maintaining the sparse set until that threshold is
-     * breached.
-     *
-     * @param p - the precision value for the normal set
+     * @param p - the precision value for the normal set.
+     *          Must match the precision of any instances you intend to {@link #addAll(InputStream) merge}.
+     *          Will take O(2^p) memory!
      */
     public StreamingHyperLogLogPlus(int p)
     {
@@ -90,7 +87,6 @@ public class StreamingHyperLogLogPlus implements ICardinality {
         else {
             throw new StreamingHyperLogLogPlusMergeException("Legacy decode not supported yet");
         }
-
     }
 
     protected void decodeBytes(DataInputStream dataInputStream) throws IOException,
@@ -199,12 +195,6 @@ public class StreamingHyperLogLogPlus implements ICardinality {
         throw new UnsupportedOperationException();
     }
 
-    /**
-     * Add data to estimator based on the mode it is in
-     *
-     * @param o stream element
-     * @return Will almost always return true for sparse mode because the additions are batched in
-     */
     @Override
     public boolean offer(Object o)
     {
@@ -213,12 +203,7 @@ public class StreamingHyperLogLogPlus implements ICardinality {
     }
 
     /**
-     * Gather the cardinality estimate from this estimator.
-     * <p/>
-     * Has two procedures based on current mode. 'Normal' mode works similar to HLL but has some
-     * new bias corrections. 'Sparse' mode is linear counting.
-     *
-     * @return
+     * Copied from {@link HyperLogLogPlus#cardinality()}
      */
     @Override
     public long cardinality()
@@ -320,11 +305,9 @@ public class StreamingHyperLogLogPlus implements ICardinality {
     }
 
     @Override
-    public byte[] getBytes() throws IOException
-    {
+    public byte[] getBytes() throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
-        // write version flag (always negative)
         writeToStream(dos);
         return baos.toByteArray();
     }
@@ -337,6 +320,7 @@ public class StreamingHyperLogLogPlus implements ICardinality {
     }
 
     private void writeToStream(DataOutputStream dos) throws IOException {
+        // write version flag (always negative)
         dos.writeInt(-VERSION);
         Varint.writeUnsignedVarInt(p, dos);
         Varint.writeUnsignedVarInt(0, dos); // For sp
@@ -350,19 +334,13 @@ public class StreamingHyperLogLogPlus implements ICardinality {
 
     /**
      * Add all the elements of the other set to this set.
-     *
-     * If possible, the sparse mode is protected. A switch to the normal mode
-     * is triggered only if the resulting set exceed the threshold.
-     *
      * This operation does not imply a loss of precision.
      *
-     * @param other A compatible Hyperloglog++ instance (same p and sp)
+     * @param other A compatible StreamingHyperLogLogPlus instance (same p)
      * @throws CardinalityMergeException if other is not compatible
      */
-    public void addAll(StreamingHyperLogLogPlus other) throws HyperLogLogPlus.HyperLogLogPlusMergeException
-    {
-        if (other.sizeof() != sizeof())
-        {
+    public void addAll(StreamingHyperLogLogPlus other) throws HyperLogLogPlus.HyperLogLogPlusMergeException {
+        if (other.sizeof() != sizeof()) {
             throw new HyperLogLogPlus.HyperLogLogPlusMergeException("Cannot merge estimators of different sizes");
         }
 
@@ -370,18 +348,7 @@ public class StreamingHyperLogLogPlus implements ICardinality {
     }
 
     /**
-     * Merge this HLL++ with a bunch of others! The power of minions!
-     * <p/>
-     * Most of the logic consists of case analysis about the state of this HLL++ and each one it wants to merge
-     * with. If either of them is 'normal' mode then the other converts to 'normal' as well. A touching sacrifice.
-     * 'Normal's combine just like regular HLL estimators do.
-     * <p/>
-     * If they happen to be both sparse, then it checks if their combined size would be too large and if so, they get
-     * relegated to normal mode anyway. Otherwise, the mergeEstimators function is called, and a new sparse HLL++ is born.
-     *
-     * @param estimators the estimators to merge with this one
-     * @return a new estimator with their combined knowledge
-     * @throws CardinalityMergeException
+     * Copied from {@link HyperLogLogPlus#merge(ICardinality...)}
      */
 
     @Override
@@ -408,7 +375,6 @@ public class StreamingHyperLogLogPlus implements ICardinality {
         return merged;
     }
 
-    /** exposed for testing */
     protected StreamingRegisterSet getRegisterSet() {
         return registerSet;
     }
