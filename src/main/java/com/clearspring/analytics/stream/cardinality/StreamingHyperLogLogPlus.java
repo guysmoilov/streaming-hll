@@ -79,18 +79,26 @@ public class StreamingHyperLogLogPlus implements ICardinality {
      * @param inputStream Should contain the output of {@link HyperLogLogPlus#getBytes()}.
      */
     public void addAll(InputStream inputStream) throws CardinalityMergeException, IOException {
+        addAll(inputStream, false);
+    }
+
+    /**
+     * @param unsignedOnly Set to true to simulate negative ints as unsigned ints - in case negative ints give the underlying
+     *                     stream digestion problems.
+     */
+    public void addAll(InputStream inputStream, boolean unsignedOnly) throws CardinalityMergeException, IOException {
         DataInputStream dataInputStream = new DataInputStream(inputStream);
-        int version = dataInputStream.readInt();
+        int version = unsignedOnly ? Varint.readSignedVarInt(dataInputStream) : dataInputStream.readInt();
         if (version < 0) {
-            decodeBytes(dataInputStream);
+            decodeBytes(dataInputStream, unsignedOnly);
         }
         else {
             throw new StreamingHyperLogLogPlusMergeException("Legacy decode not supported yet");
         }
     }
 
-    protected void decodeBytes(DataInputStream dataInputStream) throws IOException,
-                                                                     StreamingHyperLogLogPlusMergeException {
+    protected void decodeBytes(DataInputStream dataInputStream, boolean unsignedOnly) throws IOException,
+                                                                                             StreamingHyperLogLogPlusMergeException {
         int otherP = Varint.readUnsignedVarInt(dataInputStream);
 
         if (this.p != otherP) {
@@ -316,12 +324,25 @@ public class StreamingHyperLogLogPlus implements ICardinality {
      * Similar to {@link #getBytes()}, but writes the bytes directly to the stream.
      */
     public void writeToStream(OutputStream outputStream) throws IOException {
-        writeToStream(new DataOutputStream(outputStream));
+        writeToStream(outputStream, false);
     }
 
-    private void writeToStream(DataOutputStream dos) throws IOException {
+    /**
+     * @param unsignedOnly Set to true to simulate negative ints as unsigned ints - in case negative ints give the underlying
+     *                     stream digestion problems.
+     */
+    public void writeToStream(OutputStream outputStream, boolean unsignedOnly) throws IOException {
+        writeToStream(new DataOutputStream(outputStream), unsignedOnly);
+    }
+
+    private void writeToStream(DataOutputStream dos, boolean unsignedOnly) throws IOException {
         // write version flag (always negative)
-        dos.writeInt(-VERSION);
+        if (unsignedOnly) {
+            Varint.writeSignedVarInt(-VERSION, dos);
+        }
+        else {
+            dos.writeInt(-VERSION);
+        }
         Varint.writeUnsignedVarInt(p, dos);
         Varint.writeUnsignedVarInt(0, dos); // For sp
         Varint.writeUnsignedVarInt(0, dos);

@@ -127,7 +127,7 @@ public class StreamingHyperLogLogPlusTest {
     }
 
     @Test
-    public void writeToStream() throws Exception {
+    public void serder_default() throws Exception {
         StreamingHyperLogLogPlus src = new StreamingHyperLogLogPlus(12);
         addFull(src);
         long cardinality = src.cardinality();
@@ -140,6 +140,41 @@ public class StreamingHyperLogLogPlusTest {
         target.addAll(new ByteArrayInputStream(outputStream.toByteArray()));
 
         assertThat(target.cardinality()).isEqualTo(cardinality);
+    }
+
+    private void serderTest(boolean writeUnsignedOnly, boolean readUnsignedOnly) throws IOException, CardinalityMergeException {
+        StreamingHyperLogLogPlus src = new StreamingHyperLogLogPlus(12);
+        addFull(src);
+        long cardinality = src.cardinality();
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        src.writeToStream(outputStream, writeUnsignedOnly);
+        outputStream.close();
+
+        StreamingHyperLogLogPlus target = new StreamingHyperLogLogPlus(12);
+        target.addAll(new ByteArrayInputStream(outputStream.toByteArray()), readUnsignedOnly);
+
+        assertThat(target.cardinality()).isEqualTo(cardinality);
+    }
+
+    @Test
+    public void serder_unsigned_toUnsigned() throws Exception {
+        serderTest(true, true);
+    }
+
+    @Test(expected = StreamingHyperLogLogPlus.StreamingHyperLogLogPlusMergeException.class)
+    public void serder_unsigned_toSigned() throws Exception {
+        serderTest(true, false);
+    }
+
+    @Test(expected = StreamingHyperLogLogPlus.StreamingHyperLogLogPlusMergeException.class)
+    public void serder_signed_toUnsigned() throws Exception {
+        serderTest(false, true);
+    }
+
+    @Test
+    public void serder_signed_toSigned() throws Exception {
+        serderTest(false, false);
     }
 
     @Test(expected = CardinalityMergeException.class)
